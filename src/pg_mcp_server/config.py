@@ -11,6 +11,7 @@ class DatabaseSettings(BaseSettings):
         env_prefix="PG_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     host: str = Field(default="localhost", description="Database host")
@@ -48,6 +49,7 @@ class ServerSettings(BaseSettings):
         env_prefix="MCP_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     transport: str = Field(default="stdio", pattern="^(stdio|http)$", description="Transport type")
