@@ -1396,4 +1396,4 @@ testpaths = ["tests"]
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-14 | Sequenzia | Initial draft |
+| 1.0 | 2026-01-14 | Sequenzia | Initial draft |

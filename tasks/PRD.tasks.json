@@ -1,0 +1,778 @@
+{
+  "metadata": {
+    "source_document": "specs/PRD.md",
+    "generated_at": "2026-01-14T00:00:00Z",
+    "version": "1.0.0",
+    "project_name": "pg-mcp-server",
+    "description": "PostgreSQL MCP Server with layered schema discovery for LLMs"
+  },
+  "tasks": [
+    {
+      "id": "T001",
+      "title": "Initialize project structure with UV and pyproject.toml",
+      "description": "Set up the initial project structure following the PRD specification. Create pyproject.toml with all required dependencies (mcp, sqlalchemy[asyncio], asyncpg, pydantic, pydantic-settings, uvicorn) and dev dependencies (pytest, pytest-asyncio, pytest-cov, ruff, mypy). Configure hatchling build system with proper package structure pointing to src/pg_mcp_server.",
+      "priority": "critical",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["infrastructure", "setup"],
+      "acceptance_criteria": [
+        "pyproject.toml exists with all dependencies from PRD section 14.2",
+        "UV can install dependencies successfully with 'uv pip install -e .'",
+        "Project scripts entry point configured as pg-mcp-server = pg_mcp_server.__main__:main",
+        "Ruff and mypy configurations match PRD specifications"
+      ],
+      "test_scenarios": [
+        "Run 'uv pip install -e .' and verify no errors",
+        "Run 'uv pip install -e .[dev]' to install dev dependencies",
+        "Verify mypy strict mode is configured"
+      ],
+      "blocked_by": [],
+      "blocks": ["T002", "T003", "T004", "T005"]
+    },
+    {
+      "id": "T002",
+      "title": "Create directory structure and package skeleton",
+      "description": "Create the complete directory structure as specified in PRD section 5.3. This includes src/pg_mcp_server/ with subdirectories for database/, tools/, and models/. Create all __init__.py files to make packages importable.",
+      "priority": "critical",
+      "complexity": "XS",
+      "status": "pending",
+      "tags": ["infrastructure", "setup"],
+      "acceptance_criteria": [
+        "Directory structure matches PRD section 5.3 exactly",
+        "All __init__.py files created for package imports",
+        "src/pg_mcp_server is importable as a Python package"
+      ],
+      "test_scenarios": [
+        "Import pg_mcp_server in Python REPL without errors",
+        "Verify all subdirectory packages are importable"
+      ],
+      "blocked_by": ["T001"],
+      "blocks": ["T003", "T004", "T005", "T006", "T007", "T008"]
+    },
+    {
+      "id": "T003",
+      "title": "Implement configuration management with pydantic-settings",
+      "description": "Create config.py implementing DatabaseSettings, ServerSettings, and root Settings classes exactly as specified in PRD section 4.3. Use SecretStr for password field, proper env_prefix values (PG_ for database, MCP_ for server), and all field validators with correct defaults and constraints.",
+      "priority": "critical",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["configuration", "core"],
+      "acceptance_criteria": [
+        "DatabaseSettings class with PG_ prefix and all fields from PRD",
+        "ServerSettings class with MCP_ prefix and all fields from PRD",
+        "Root Settings class combining both with proper nesting",
+        "All Field validators match PRD constraints (ge, le, pattern, etc.)",
+        "SecretStr used for password field",
+        "Defaults match PRD exactly"
+      ],
+      "test_scenarios": [
+        "Load settings from environment variables",
+        "Load settings from .env file",
+        "Verify password is masked in string representation",
+        "Validate field constraints reject invalid values",
+        "Test default values are applied correctly"
+      ],
+      "blocked_by": ["T001", "T002"],
+      "blocks": ["T004", "T006", "T007", "T008", "T009", "T010"]
+    },
+    {
+      "id": "T004",
+      "title": "Implement SQLAlchemy async engine management",
+      "description": "Create database/engine.py with SQLAlchemy 2.0+ async engine management. Implement connection pool configuration, async context manager for sessions, health checks, and proper cleanup on shutdown. Use asyncpg as the driver. Support statement_timeout configuration at session level.",
+      "priority": "critical",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["database", "core"],
+      "acceptance_criteria": [
+        "Async engine creation using create_async_engine with asyncpg",
+        "Connection pool size configurable from settings",
+        "Pool timeout configurable from settings",
+        "Session factory with statement_timeout applied",
+        "Async context manager for connection acquisition",
+        "Graceful shutdown disposing engine",
+        "Health check method to verify connectivity"
+      ],
+      "test_scenarios": [
+        "Create engine with valid connection string",
+        "Verify pool size matches configuration",
+        "Test connection acquisition under pool exhaustion",
+        "Verify statement_timeout is applied to sessions",
+        "Test engine disposal on shutdown"
+      ],
+      "blocked_by": ["T001", "T002", "T003"],
+      "blocks": ["T005", "T006", "T007", "T008"]
+    },
+    {
+      "id": "T005",
+      "title": "Create Pydantic models for schema objects",
+      "description": "Create models/schema.py with all Pydantic models for Layer 1 tools as specified in PRD section 6.1. This includes SchemaInfo, ListSchemasInput/Output, TableInfo, ListTablesInput/Output, ColumnInfo, ForeignKeyRef, IndexInfo, ConstraintInfo, DescribeTableInput/Output, GetSampleRowsInput/Output.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["models", "schema-discovery"],
+      "acceptance_criteria": [
+        "All input/output models for Layer 1 tools implemented",
+        "Field descriptions match PRD specifications",
+        "Field validators (ge, le, default, pattern) match PRD",
+        "All optional fields use | None type syntax",
+        "Models are serializable to JSON"
+      ],
+      "test_scenarios": [
+        "Create instances of all models with valid data",
+        "Verify JSON serialization/deserialization",
+        "Test field validation rejects invalid values",
+        "Verify optional fields accept None"
+      ],
+      "blocked_by": ["T001", "T002"],
+      "blocks": ["T006", "T009"]
+    },
+    {
+      "id": "T006",
+      "title": "Implement schema discovery database queries",
+      "description": "Create database/schema.py implementing the raw SQL queries for schema discovery operations. Include list_schemas_query, list_tables_query, describe_table_query (columns, indexes, constraints), and get_sample_rows_query. Use reference queries from PRD Appendix 14.1 as starting point.",
+      "priority": "high",
+      "complexity": "L",
+      "status": "pending",
+      "tags": ["database", "schema-discovery"],
+      "acceptance_criteria": [
+        "list_schemas_query returns schema name, owner, description, table_count",
+        "list_tables_query returns all TableInfo fields including size metrics",
+        "describe_table returns columns with all metadata including FK refs",
+        "describe_table returns indexes with type and columns",
+        "describe_table returns constraints with definitions",
+        "get_sample_rows supports column selection, filtering, randomization",
+        "All queries use parameterized inputs"
+      ],
+      "test_scenarios": [
+        "Query schemas in test database",
+        "Query tables with and without views",
+        "Query table description with all related metadata",
+        "Sample rows with various limit values",
+        "Test name_pattern filtering with LIKE syntax"
+      ],
+      "blocked_by": ["T004", "T005"],
+      "blocks": ["T009"]
+    },
+    {
+      "id": "T007",
+      "title": "Create Pydantic models for relationship objects",
+      "description": "Create models/relationships.py with Pydantic models for Layer 2 tools as specified in PRD section 6.2. This includes ForeignKeyRelation, GetForeignKeysInput/Output, JoinStep, JoinPath, FindJoinPathInput/Output.",
+      "priority": "high",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["models", "relationships"],
+      "acceptance_criteria": [
+        "All input/output models for Layer 2 tools implemented",
+        "ForeignKeyRelation captures all FK metadata",
+        "JoinStep captures single join with suggested join type",
+        "JoinPath includes sql_example field",
+        "Field constraints match PRD (max_depth ge=1, le=6)"
+      ],
+      "test_scenarios": [
+        "Create ForeignKeyRelation with valid data",
+        "Build JoinPath with multiple steps",
+        "Verify sql_example generation logic"
+      ],
+      "blocked_by": ["T001", "T002"],
+      "blocks": ["T008", "T010"]
+    },
+    {
+      "id": "T008",
+      "title": "Implement relationship discovery database queries",
+      "description": "Create database/relationships.py implementing queries for foreign key discovery and join path finding. Include get_outgoing_fks, get_incoming_fks queries using PRD Appendix 14.1 reference. Implement BFS/graph traversal algorithm for find_join_path with configurable max_depth.",
+      "priority": "high",
+      "complexity": "L",
+      "status": "pending",
+      "tags": ["database", "relationships"],
+      "acceptance_criteria": [
+        "get_foreign_keys returns both outgoing and incoming relationships",
+        "Foreign keys include on_update and on_delete actions",
+        "find_join_path implements graph traversal (BFS)",
+        "max_depth is respected in path finding",
+        "Multiple paths returned when they exist",
+        "Generated SQL examples are syntactically correct"
+      ],
+      "test_scenarios": [
+        "Find FKs for table with both outgoing and incoming",
+        "Find join path between directly related tables",
+        "Find join path requiring multiple hops",
+        "Verify max_depth limits traversal",
+        "Handle case where no path exists"
+      ],
+      "blocked_by": ["T004", "T007"],
+      "blocks": ["T010"]
+    },
+    {
+      "id": "T009",
+      "title": "Create Pydantic models for query results and errors",
+      "description": "Create models/results.py with Pydantic models for Layer 3 tools and error handling as specified in PRD sections 6.3 and 7. This includes QueryColumn, ExecuteQueryInput/Output, ExplainQueryInput/Output, ErrorDetail, and ToolError models.",
+      "priority": "high",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["models", "query-execution", "errors"],
+      "acceptance_criteria": [
+        "ExecuteQueryInput supports sql, params, limit, timeout_ms",
+        "ExecuteQueryOutput includes columns metadata, has_more, execution_time_ms",
+        "ExplainQueryInput supports analyze, format, verbose, buffers options",
+        "ExplainQueryOutput includes plan, estimated cost/rows, actual time, warnings",
+        "ErrorDetail includes code, message, suggestion, context",
+        "ToolError wraps ErrorDetail with tool_name and input_received"
+      ],
+      "test_scenarios": [
+        "Create query result with various data types",
+        "Verify has_more flag logic",
+        "Create error responses with all fields",
+        "Test serialization of error context dict"
+      ],
+      "blocked_by": ["T001", "T002"],
+      "blocks": ["T011", "T012", "T013"]
+    },
+    {
+      "id": "T010",
+      "title": "Implement query execution service with SQL validation",
+      "description": "Create database/queries.py implementing secure query execution. Include strict SQL validation using allowlist approach (only SELECT/WITH...SELECT), keyword blocking for dangerous operations (INSERT, UPDATE, DELETE, DROP, etc.), parameterized query execution, result limiting, and timeout handling.",
+      "priority": "critical",
+      "complexity": "L",
+      "status": "pending",
+      "tags": ["database", "query-execution", "security"],
+      "acceptance_criteria": [
+        "SQL validation rejects all blocked keywords from PRD section 8.1",
+        "Only SELECT and WITH...SELECT statements allowed",
+        "Parameterized queries prevent SQL injection",
+        "Result limiting enforced (default 1000, max 10000)",
+        "Query timeout configurable per-query",
+        "EXPLAIN output parsing for text/json/yaml formats",
+        "Query hash generation for reference"
+      ],
+      "test_scenarios": [
+        "Execute valid SELECT query",
+        "Reject INSERT/UPDATE/DELETE statements",
+        "Reject DROP/TRUNCATE/ALTER statements",
+        "Reject SET/RESET session statements",
+        "Test parameterized query with various types",
+        "Verify result truncation with has_more flag",
+        "Test query timeout cancellation"
+      ],
+      "blocked_by": ["T004", "T009"],
+      "blocks": ["T011"]
+    },
+    {
+      "id": "T011",
+      "title": "Implement Layer 1 MCP tools (schema discovery)",
+      "description": "Create tools/schema_tools.py implementing the four Layer 1 tools: list_schemas, list_tables, describe_table, get_sample_rows. Register tools with MCP server using FastMCP patterns. Include proper tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) as specified in PRD.",
+      "priority": "critical",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["tools", "mcp", "schema-discovery"],
+      "acceptance_criteria": [
+        "list_schemas tool registered with correct annotations",
+        "list_tables tool with schema_name, include_views, name_pattern params",
+        "describe_table tool with include_indexes, include_constraints options",
+        "get_sample_rows tool with limit (1-100), columns, where_clause, randomize",
+        "All tools return structured Pydantic model responses",
+        "All tools handle errors with ToolError format"
+      ],
+      "test_scenarios": [
+        "List schemas excluding system schemas",
+        "List schemas including system schemas",
+        "List tables with view filtering",
+        "Describe table with full metadata",
+        "Get sample rows with column selection",
+        "Test error handling for non-existent objects"
+      ],
+      "blocked_by": ["T005", "T006", "T009", "T010"],
+      "blocks": ["T014", "T015"]
+    },
+    {
+      "id": "T012",
+      "title": "Implement Layer 2 MCP tools (relationship discovery)",
+      "description": "Create tools/relationship_tools.py implementing the two Layer 2 tools: get_foreign_keys, find_join_path. Register tools with MCP server with proper annotations. get_foreign_keys should return both incoming and outgoing relationships. find_join_path should generate SQL examples for discovered paths.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["tools", "mcp", "relationships"],
+      "acceptance_criteria": [
+        "get_foreign_keys returns outgoing and incoming FKs separately",
+        "find_join_path supports max_depth (1-6) configuration",
+        "find_join_path generates syntactically correct SQL examples",
+        "Tools return appropriate ToolError for PATH_NOT_FOUND",
+        "Tool annotations match PRD specifications"
+      ],
+      "test_scenarios": [
+        "Get FKs for table with multiple relationships",
+        "Find direct join path (depth 1)",
+        "Find multi-hop join path",
+        "Handle no path found gracefully",
+        "Verify SQL example correctness"
+      ],
+      "blocked_by": ["T007", "T008", "T009"],
+      "blocks": ["T014", "T015"]
+    },
+    {
+      "id": "T013",
+      "title": "Implement Layer 3 MCP tools (query execution)",
+      "description": "Create tools/query_tools.py implementing the two Layer 3 tools: execute_query, explain_query. execute_query must enforce read-only validation and parameterized execution. explain_query supports analyze, format (text/json/yaml), verbose, and buffers options. Include performance warning detection in explain output.",
+      "priority": "critical",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["tools", "mcp", "query-execution"],
+      "acceptance_criteria": [
+        "execute_query validates read-only before execution",
+        "execute_query uses parameterized queries ($1, $2 syntax)",
+        "execute_query enforces limit (default 1000, max 10000)",
+        "explain_query supports all format options",
+        "explain_query with analyze=true returns actual timings",
+        "explain_query detects potential performance warnings",
+        "Tool annotations match PRD (readOnlyHint varies by analyze flag)"
+      ],
+      "test_scenarios": [
+        "Execute query with parameters",
+        "Reject write operation attempt",
+        "Verify result limiting and has_more",
+        "EXPLAIN with different formats",
+        "EXPLAIN ANALYZE with buffer stats",
+        "Verify warning detection for sequential scans"
+      ],
+      "blocked_by": ["T009", "T010"],
+      "blocks": ["T014", "T015"]
+    },
+    {
+      "id": "T014",
+      "title": "Implement MCP server initialization with STDIO transport",
+      "description": "Create server.py implementing MCP server initialization using the official mcp Python SDK with FastMCP patterns. Register all 8 tools from the three layers. Support STDIO transport for local execution via Claude Desktop, CLI tools, or IDE integrations. Wire up database engine lifecycle (startup/shutdown).",
+      "priority": "critical",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["mcp", "transport", "core"],
+      "acceptance_criteria": [
+        "MCP server initializes with FastMCP patterns",
+        "All 8 tools registered and discoverable",
+        "STDIO transport functional for local execution",
+        "Database engine created on startup, disposed on shutdown",
+        "Configuration loaded from environment/settings",
+        "Proper error handling during initialization"
+      ],
+      "test_scenarios": [
+        "Start server in STDIO mode",
+        "Verify tool discovery via MCP protocol",
+        "Test tool invocation over STDIO",
+        "Verify graceful shutdown",
+        "Test with MCP Inspector"
+      ],
+      "blocked_by": ["T011", "T012", "T013"],
+      "blocks": ["T016", "T017"]
+    },
+    {
+      "id": "T015",
+      "title": "Implement Streamable HTTP transport",
+      "description": "Extend server.py to support Streamable HTTP transport for remote/hosted deployments. Implement stateless JSON request/response pattern (not SSE streaming) suitable for serverless or containerized environments. Use uvicorn as the ASGI server.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["mcp", "transport", "http"],
+      "acceptance_criteria": [
+        "HTTP transport mode selectable via MCP_TRANSPORT=http",
+        "Stateless JSON request/response (not SSE)",
+        "Host/port configurable via MCP_HOST/MCP_PORT",
+        "Uvicorn integration for ASGI serving",
+        "Proper HTTP error responses",
+        "Health check endpoint available"
+      ],
+      "test_scenarios": [
+        "Start server in HTTP mode",
+        "Make HTTP request to tool endpoint",
+        "Verify JSON response format",
+        "Test health check endpoint",
+        "Test with different host/port configurations"
+      ],
+      "blocked_by": ["T011", "T012", "T013"],
+      "blocks": ["T016", "T017"]
+    },
+    {
+      "id": "T016",
+      "title": "Create entry point and CLI",
+      "description": "Create __main__.py implementing the application entry point. Support command-line argument parsing for transport selection and configuration overrides. Implement the 'main' function registered as pg-mcp-server script entry point. Support both STDIO and HTTP modes based on MCP_TRANSPORT setting.",
+      "priority": "high",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["cli", "core"],
+      "acceptance_criteria": [
+        "pg-mcp-server command available after installation",
+        "Transport mode selectable via environment or CLI arg",
+        "Logging configured based on MCP_LOG_LEVEL and MCP_LOG_FORMAT",
+        "Graceful error messages for configuration issues",
+        "Help text documents available options"
+      ],
+      "test_scenarios": [
+        "Run pg-mcp-server --help",
+        "Start in STDIO mode (default)",
+        "Start in HTTP mode via environment variable",
+        "Verify log level configuration"
+      ],
+      "blocked_by": ["T014", "T015"],
+      "blocks": ["T019", "T020"]
+    },
+    {
+      "id": "T017",
+      "title": "Implement structured error handling",
+      "description": "Create unified error handling throughout the application following PRD section 7. Implement all error codes (SCHEMA_NOT_FOUND, TABLE_NOT_FOUND, etc.) with appropriate suggestions. Add similar-name detection for TABLE_NOT_FOUND errors. Ensure all tool errors follow ToolError schema.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["errors", "core"],
+      "acceptance_criteria": [
+        "All 10 error codes from PRD implemented",
+        "Each error includes machine-readable code",
+        "Each error includes human-readable message",
+        "Actionable suggestions provided where applicable",
+        "Context dict includes debugging information",
+        "TABLE_NOT_FOUND suggests similar table names"
+      ],
+      "test_scenarios": [
+        "Trigger each error type and verify format",
+        "Verify similar name suggestions work",
+        "Verify context includes useful debugging info",
+        "Test error serialization to JSON"
+      ],
+      "blocked_by": ["T009"],
+      "blocks": ["T019", "T020"]
+    },
+    {
+      "id": "T018",
+      "title": "Create example .env file and documentation",
+      "description": "Create .env.example file documenting all configuration options with comments explaining each setting. Follow the environment variable naming from PRD section 4.3 (PG_ prefix for database, MCP_ prefix for server).",
+      "priority": "medium",
+      "complexity": "XS",
+      "status": "pending",
+      "tags": ["documentation", "configuration"],
+      "acceptance_criteria": [
+        ".env.example includes all PG_ variables with descriptions",
+        ".env.example includes all MCP_ variables with descriptions",
+        "Default values documented inline",
+        "Constraints documented (e.g., pool_size 1-20)",
+        "File is parseable by pydantic-settings"
+      ],
+      "test_scenarios": [
+        "Copy .env.example to .env and start server",
+        "Verify all variables are recognized"
+      ],
+      "blocked_by": ["T003"],
+      "blocks": ["T021"]
+    },
+    {
+      "id": "T019",
+      "title": "Write unit tests for schema discovery tools",
+      "description": "Create tests/test_schema_tools.py with comprehensive unit tests for Layer 1 tools. Test valid inputs, error handling, edge cases. Mock database connections for isolation. Cover list_schemas, list_tables, describe_table, get_sample_rows.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["testing", "schema-discovery"],
+      "acceptance_criteria": [
+        "Tests for each Layer 1 tool with valid inputs",
+        "Tests for error conditions (non-existent schema/table)",
+        "Tests for edge cases (empty schemas, no tables)",
+        "Tests for input validation (invalid parameters)",
+        "Database connections mocked for isolation",
+        "Test coverage > 80% for schema tools"
+      ],
+      "test_scenarios": [
+        "Test list_schemas with/without system schemas",
+        "Test list_tables with pattern filtering",
+        "Test describe_table with missing indexes",
+        "Test get_sample_rows with randomization"
+      ],
+      "blocked_by": ["T011", "T017"],
+      "blocks": ["T022"]
+    },
+    {
+      "id": "T020",
+      "title": "Write unit tests for relationship and query tools",
+      "description": "Create tests/test_relationship_tools.py and tests/test_query_tools.py with comprehensive unit tests for Layer 2 and Layer 3 tools. Test SQL validation with attack vectors. Mock database for isolation.",
+      "priority": "high",
+      "complexity": "M",
+      "status": "pending",
+      "tags": ["testing", "relationships", "query-execution"],
+      "acceptance_criteria": [
+        "Tests for get_foreign_keys with various relationship patterns",
+        "Tests for find_join_path with different depths",
+        "Tests for execute_query with valid/invalid SQL",
+        "SQL injection attempt tests",
+        "Tests for blocked keyword detection",
+        "Tests for explain_query with all format options"
+      ],
+      "test_scenarios": [
+        "Test FK discovery for table with no FKs",
+        "Test join path with max_depth exceeded",
+        "Test SQL validation rejects INSERT/UPDATE/DELETE",
+        "Test parameterized query execution",
+        "Test result limiting"
+      ],
+      "blocked_by": ["T012", "T013", "T017"],
+      "blocks": ["T022"]
+    },
+    {
+      "id": "T021",
+      "title": "Create pytest fixtures and test configuration",
+      "description": "Create tests/conftest.py with pytest fixtures for database connections, mock data, and test configuration. Include fixtures for async testing with pytest-asyncio. Prepare docker-compose for integration tests.",
+      "priority": "medium",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["testing", "infrastructure"],
+      "acceptance_criteria": [
+        "Pytest fixtures for mock database engine",
+        "Fixtures for sample schema/table data",
+        "Async fixtures properly configured",
+        "Docker compose for PostgreSQL test instance",
+        "Test markers for unit vs integration tests"
+      ],
+      "test_scenarios": [
+        "Run pytest with all fixtures loading",
+        "Verify async tests execute correctly",
+        "Start PostgreSQL via docker-compose for integration"
+      ],
+      "blocked_by": ["T004", "T018"],
+      "blocks": ["T019", "T020", "T022"]
+    },
+    {
+      "id": "T022",
+      "title": "Write integration tests with real PostgreSQL",
+      "description": "Create integration tests that run against a real PostgreSQL instance (via Docker). Test connection pooling under load, timeout handling, and verify with PostgreSQL versions 14, 15, 16. Test MCP protocol compliance with MCP Inspector.",
+      "priority": "medium",
+      "complexity": "L",
+      "status": "pending",
+      "tags": ["testing", "integration"],
+      "acceptance_criteria": [
+        "Tests run against Dockerized PostgreSQL",
+        "Connection pool behavior verified under concurrent load",
+        "Timeout handling tested with slow queries",
+        "Both STDIO and HTTP transports tested",
+        "MCP tool discovery tested",
+        "Tests pass on PostgreSQL 14, 15, 16"
+      ],
+      "test_scenarios": [
+        "Run full tool workflow against real database",
+        "Test concurrent query execution",
+        "Test timeout cancellation",
+        "Verify MCP Inspector compatibility"
+      ],
+      "blocked_by": ["T019", "T020", "T021"],
+      "blocks": ["T023"]
+    },
+    {
+      "id": "T023",
+      "title": "Add type hints and run mypy strict validation",
+      "description": "Ensure all modules have complete type hints compatible with Python 3.11+. Run mypy in strict mode and fix all type errors. Use modern type syntax (X | None instead of Optional[X]).",
+      "priority": "medium",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["quality", "typing"],
+      "acceptance_criteria": [
+        "All functions have complete type annotations",
+        "Modern type syntax used (X | None)",
+        "mypy --strict passes with no errors",
+        "Generic types properly parameterized",
+        "Async types correctly annotated"
+      ],
+      "test_scenarios": [
+        "Run mypy --strict and verify zero errors",
+        "Verify IDE type inference works correctly"
+      ],
+      "blocked_by": ["T022"],
+      "blocks": ["T024"]
+    },
+    {
+      "id": "T024",
+      "title": "Run ruff linting and format code",
+      "description": "Configure and run ruff for linting and formatting. Fix all linting errors. Ensure code follows configured rules: E, F, I, N, W, UP, B, C4, SIM. Line length 100, target Python 3.11.",
+      "priority": "medium",
+      "complexity": "XS",
+      "status": "pending",
+      "tags": ["quality", "linting"],
+      "acceptance_criteria": [
+        "ruff check passes with no errors",
+        "ruff format applied to all source files",
+        "Import sorting consistent (I rules)",
+        "No unused imports or variables (F rules)",
+        "Code follows Python conventions (N rules)"
+      ],
+      "test_scenarios": [
+        "Run ruff check and verify no violations",
+        "Run ruff format --check to verify formatting"
+      ],
+      "blocked_by": ["T023"],
+      "blocks": ["T025"]
+    },
+    {
+      "id": "T025",
+      "title": "Verify test coverage exceeds 80%",
+      "description": "Run pytest with coverage reporting. Ensure overall test coverage exceeds 80% as required by PRD section 13.2. Add tests for any uncovered critical paths.",
+      "priority": "medium",
+      "complexity": "S",
+      "status": "pending",
+      "tags": ["testing", "quality"],
+      "acceptance_criteria": [
+        "pytest-cov configured and reporting",
+        "Overall coverage > 80%",
+        "All tool functions have test coverage",
+        "Error handling paths covered",
+        "Coverage report generated in CI-friendly format"
+      ],
+      "test_scenarios": [
+        "Run pytest --cov and verify > 80%",
+        "Identify and address uncovered critical paths"
+      ],
+      "blocked_by": ["T022", "T024"],
+      "blocks": []
+    }
+  ],
+  "dependency_graph": {
+    "nodes": [
+      {"id": "T001", "label": "Project init"},
+      {"id": "T002", "label": "Directory structure"},
+      {"id": "T003", "label": "Config management"},
+      {"id": "T004", "label": "DB engine"},
+      {"id": "T005", "label": "Schema models"},
+      {"id": "T006", "label": "Schema queries"},
+      {"id": "T007", "label": "Relationship models"},
+      {"id": "T008", "label": "Relationship queries"},
+      {"id": "T009", "label": "Result/error models"},
+      {"id": "T010", "label": "Query execution"},
+      {"id": "T011", "label": "Layer 1 tools"},
+      {"id": "T012", "label": "Layer 2 tools"},
+      {"id": "T013", "label": "Layer 3 tools"},
+      {"id": "T014", "label": "STDIO transport"},
+      {"id": "T015", "label": "HTTP transport"},
+      {"id": "T016", "label": "CLI entry point"},
+      {"id": "T017", "label": "Error handling"},
+      {"id": "T018", "label": ".env.example"},
+      {"id": "T019", "label": "Schema tests"},
+      {"id": "T020", "label": "Query tests"},
+      {"id": "T021", "label": "Test fixtures"},
+      {"id": "T022", "label": "Integration tests"},
+      {"id": "T023", "label": "Type hints"},
+      {"id": "T024", "label": "Linting"},
+      {"id": "T025", "label": "Coverage"}
+    ],
+    "edges": [
+      {"from": "T001", "to": "T002"},
+      {"from": "T001", "to": "T003"},
+      {"from": "T002", "to": "T003"},
+      {"from": "T002", "to": "T004"},
+      {"from": "T002", "to": "T005"},
+      {"from": "T002", "to": "T007"},
+      {"from": "T002", "to": "T009"},
+      {"from": "T003", "to": "T004"},
+      {"from": "T003", "to": "T018"},
+      {"from": "T004", "to": "T006"},
+      {"from": "T004", "to": "T008"},
+      {"from": "T004", "to": "T010"},
+      {"from": "T004", "to": "T021"},
+      {"from": "T005", "to": "T006"},
+      {"from": "T006", "to": "T011"},
+      {"from": "T007", "to": "T008"},
+      {"from": "T008", "to": "T012"},
+      {"from": "T009", "to": "T010"},
+      {"from": "T009", "to": "T011"},
+      {"from": "T009", "to": "T012"},
+      {"from": "T009", "to": "T013"},
+      {"from": "T009", "to": "T017"},
+      {"from": "T010", "to": "T011"},
+      {"from": "T010", "to": "T013"},
+      {"from": "T011", "to": "T014"},
+      {"from": "T011", "to": "T015"},
+      {"from": "T012", "to": "T014"},
+      {"from": "T012", "to": "T015"},
+      {"from": "T013", "to": "T014"},
+      {"from": "T013", "to": "T015"},
+      {"from": "T014", "to": "T016"},
+      {"from": "T015", "to": "T016"},
+      {"from": "T011", "to": "T019"},
+      {"from": "T017", "to": "T019"},
+      {"from": "T012", "to": "T020"},
+      {"from": "T013", "to": "T020"},
+      {"from": "T017", "to": "T020"},
+      {"from": "T018", "to": "T021"},
+      {"from": "T019", "to": "T022"},
+      {"from": "T020", "to": "T022"},
+      {"from": "T021", "to": "T019"},
+      {"from": "T021", "to": "T020"},
+      {"from": "T021", "to": "T022"},
+      {"from": "T022", "to": "T023"},
+      {"from": "T023", "to": "T024"},
+      {"from": "T022", "to": "T025"},
+      {"from": "T024", "to": "T025"}
+    ]
+  },
+  "execution_phases": [
+    {
+      "phase": 1,
+      "name": "Foundation",
+      "description": "Project initialization and basic structure",
+      "tasks": ["T001"],
+      "parallel_capacity": 1
+    },
+    {
+      "phase": 2,
+      "name": "Structure & Configuration",
+      "description": "Directory structure and configuration management",
+      "tasks": ["T002", "T003"],
+      "parallel_capacity": 2
+    },
+    {
+      "phase": 3,
+      "name": "Core Infrastructure",
+      "description": "Database engine and Pydantic models",
+      "tasks": ["T004", "T005", "T007", "T009", "T018"],
+      "parallel_capacity": 5
+    },
+    {
+      "phase": 4,
+      "name": "Database Services",
+      "description": "Database query implementations",
+      "tasks": ["T006", "T008", "T010", "T017", "T021"],
+      "parallel_capacity": 5
+    },
+    {
+      "phase": 5,
+      "name": "MCP Tools",
+      "description": "All MCP tool implementations",
+      "tasks": ["T011", "T012", "T013"],
+      "parallel_capacity": 3
+    },
+    {
+      "phase": 6,
+      "name": "Transports & CLI",
+      "description": "MCP server transports and entry point",
+      "tasks": ["T014", "T015"],
+      "parallel_capacity": 2
+    },
+    {
+      "phase": 7,
+      "name": "Entry Point",
+      "description": "CLI entry point",
+      "tasks": ["T016"],
+      "parallel_capacity": 1
+    },
+    {
+      "phase": 8,
+      "name": "Unit Testing",
+      "description": "Unit tests for all components",
+      "tasks": ["T019", "T020"],
+      "parallel_capacity": 2
+    },
+    {
+      "phase": 9,
+      "name": "Integration & Quality",
+      "description": "Integration tests and code quality",
+      "tasks": ["T022", "T023"],
+      "parallel_capacity": 2
+    },
+    {
+      "phase": 10,
+      "name": "Final Quality",
+      "description": "Linting and coverage verification",
+      "tasks": ["T024", "T025"],
+      "parallel_capacity": 2
+    }
+  ]
+}

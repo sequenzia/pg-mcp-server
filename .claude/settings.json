@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "spec-task-manager@sequenzia-claude-plugins": true
+  }
+}
