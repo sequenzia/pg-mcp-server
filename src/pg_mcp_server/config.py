@@ -1,7 +1,31 @@
 """Configuration management using pydantic-settings."""
 
-from pydantic import Field, SecretStr
+from typing import Any
+
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Module-level state for env file path
+_env_file_path: str | None = None
+
+
+def set_env_file_path(path: str | None) -> None:
+    """Set the env file path for settings to use.
+
+    Args:
+        path: Path to .env file, or None to use default (.env in current directory).
+    """
+    global _env_file_path
+    _env_file_path = path
+
+
+def get_env_file_path() -> str | None:
+    """Get the currently configured env file path.
+
+    Returns:
+        The configured env file path, or None if using default.
+    """
+    return _env_file_path
 
 
 class DatabaseSettings(BaseSettings):
@@ -70,8 +94,20 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
 
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)  # type: ignore[arg-type]
-    server: ServerSettings = Field(default_factory=ServerSettings)
+    database: DatabaseSettings = Field(default=None)  # type: ignore[assignment]
+    server: ServerSettings = Field(default=None)  # type: ignore[assignment]
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_nested_settings(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Load nested settings with the configured env file path."""
+        env_file = _env_file_path
+        if "database" not in data or data["database"] is None:
+            # _env_file is a valid pydantic-settings init parameter
+            data["database"] = DatabaseSettings(_env_file=env_file)  # type: ignore[call-arg]
+        if "server" not in data or data["server"] is None:
+            data["server"] = ServerSettings(_env_file=env_file)  # type: ignore[call-arg]
+        return data
 
 
 def get_settings() -> Settings:

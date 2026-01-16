@@ -1,5 +1,6 @@
 """Pytest fixtures for PostgreSQL MCP Server tests."""
 
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -7,7 +8,15 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from pg_mcp_server.config import DatabaseSettings, ServerSettings, Settings
+from pg_mcp_server.config import DatabaseSettings, ServerSettings, Settings, set_env_file_path
+
+
+@pytest.fixture(autouse=True)
+def reset_env_file_path() -> Generator[None, None, None]:
+    """Reset env file path state before and after each test."""
+    set_env_file_path(None)
+    yield
+    set_env_file_path(None)
 
 
 @pytest.fixture

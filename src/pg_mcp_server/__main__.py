@@ -1,14 +1,60 @@
 """Entry point for the PostgreSQL MCP Server."""
 
+import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 
-from pg_mcp_server.config import get_settings
+from pg_mcp_server.config import get_settings, set_env_file_path
 from pg_mcp_server.server import mcp
 
 # Import tools to register them with the server
 from pg_mcp_server.tools import query_tools, relationship_tools, schema_tools  # noqa: F401
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed arguments namespace.
+    """
+    parser = argparse.ArgumentParser(
+        prog="pg-mcp-server",
+        description="PostgreSQL MCP Server for database access via Model Context Protocol",
+    )
+    parser.add_argument(
+        "--env-file",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to .env file (default: .env in current directory)",
+    )
+    return parser.parse_args()
+
+
+def validate_env_file(path: str | None) -> str | None:
+    """Validate that the specified env file exists.
+
+    Args:
+        path: Path to env file, or None if not specified.
+
+    Returns:
+        Resolved absolute path to the env file, or None if not specified.
+
+    Exits:
+        With code 1 if the file doesn't exist or is not a file.
+    """
+    if path is None:
+        return None
+    env_path = Path(path)
+    if not env_path.exists():
+        print(f"Error: Environment file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    if not env_path.is_file():
+        print(f"Error: Path is not a file: {path}", file=sys.stderr)
+        sys.exit(1)
+    return str(env_path.resolve())
 
 
 def setup_logging(level: str, format_type: str) -> None:
@@ -35,6 +81,10 @@ def setup_logging(level: str, format_type: str) -> None:
 
 def main() -> None:
     """Main entry point for the MCP server."""
+    args = parse_args()
+    env_file = validate_env_file(args.env_file)
+    set_env_file_path(env_file)
+
     settings = get_settings()
 
     setup_logging(settings.server.log_level, settings.server.log_format)
