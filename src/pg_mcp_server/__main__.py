@@ -1,5 +1,6 @@
 """Entry point for the PostgreSQL MCP Server."""
 
+import asyncio
 import logging
 import os
 import sys
@@ -9,6 +10,7 @@ from typing import Annotated
 import typer
 
 from pg_mcp_server.config import get_settings, set_env_file_path
+from pg_mcp_server.database.engine import create_engine, dispose_engine, test_connection
 from pg_mcp_server.server import mcp
 
 # Import tools to register them with the server
@@ -16,7 +18,6 @@ from pg_mcp_server.tools import query_tools, relationship_tools, schema_tools  #
 
 app = typer.Typer(
     name="pg-mcp-server",
-    help="PostgreSQL MCP Server for database access via Model Context Protocol",
     no_args_is_help=False,
 )
 
@@ -71,8 +72,9 @@ def setup_logging(level: str, format_type: str) -> None:
     )
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     env_file: Annotated[
         str | None,
         typer.Option(
@@ -83,7 +85,13 @@ def main(
         ),
     ] = None,
 ) -> None:
-    """Start the PostgreSQL MCP Server."""
+    """PostgreSQL MCP Server for database access via Model Context Protocol."""
+    # If a subcommand is being invoked, just set env_file and return
+    if ctx.invoked_subcommand is not None:
+        set_env_file_path(env_file)
+        return
+
+    # No subcommand - start the server
     set_env_file_path(env_file)
 
     settings = get_settings()
@@ -101,6 +109,30 @@ def main(
         os.environ.setdefault("UVICORN_HOST", settings.server.host)
         os.environ.setdefault("UVICORN_PORT", str(settings.server.port))
         mcp.run(transport="streamable-http")
+
+
+@app.command()
+def test() -> None:
+    """Test database connection and exit."""
+    # env_file is set by the callback
+    settings = get_settings()
+
+    async def run_test() -> bool:
+        engine = await create_engine(settings.database)
+        try:
+            await test_connection(engine)
+            return True
+        except Exception as e:
+            typer.echo(f"Connection failed: {e}", err=True)
+            return False
+        finally:
+            await dispose_engine(engine)
+
+    if asyncio.run(run_test()):
+        typer.echo("Connection successful")
+        raise typer.Exit(0)
+    else:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """SQLAlchemy async engine management for PostgreSQL."""
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from pg_mcp_server.config import DatabaseSettings
@@ -31,3 +32,16 @@ async def dispose_engine(engine: AsyncEngine) -> None:
         engine: The async engine to dispose.
     """
     await engine.dispose()
+
+
+async def test_connection(engine: AsyncEngine) -> None:
+    """Test database connectivity by executing a simple query.
+
+    Args:
+        engine: The async engine to test.
+
+    Raises:
+        Exception: If connection fails.
+    """
+    async with engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))

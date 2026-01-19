@@ -1,7 +1,7 @@
 """Tests for CLI argument parsing and env file handling."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import typer
@@ -145,3 +145,90 @@ class TestSettingsWithEnvFile:
 
         # Verify server settings loaded from custom env
         assert settings.server.log_level == "DEBUG"
+
+
+class TestTestCommand:
+    """Tests for the 'test' CLI command."""
+
+    def test_test_command_success(self, tmp_path: Path) -> None:
+        """Test successful connection test exits with code 0."""
+        # Create env file with test values
+        env_file = tmp_path / "test.env"
+        env_file.write_text(
+            "PG_HOST=localhost\n"
+            "PG_DATABASE=testdb\n"
+            "PG_USER=testuser\n"
+            "PG_PASSWORD=testpass\n"
+        )
+
+        with patch("pg_mcp_server.__main__.create_engine") as mock_create, patch(
+            "pg_mcp_server.__main__.test_connection"
+        ) as mock_test, patch("pg_mcp_server.__main__.dispose_engine") as mock_dispose:
+            mock_engine = AsyncMock()
+            mock_create.return_value = mock_engine
+            mock_test.return_value = None
+            mock_dispose.return_value = None
+
+            # --env-file is now at root level, before subcommand
+            result = runner.invoke(app, ["--env-file", str(env_file), "test"])
+
+            assert result.exit_code == 0
+            assert "Connection successful" in result.output
+            mock_create.assert_called_once()
+            mock_test.assert_called_once_with(mock_engine)
+            mock_dispose.assert_called_once_with(mock_engine)
+
+    def test_test_command_failure(self, tmp_path: Path) -> None:
+        """Test failed connection test exits with code 1."""
+        env_file = tmp_path / "test.env"
+        env_file.write_text(
+            "PG_HOST=localhost\n"
+            "PG_DATABASE=testdb\n"
+            "PG_USER=testuser\n"
+            "PG_PASSWORD=testpass\n"
+        )
+
+        with patch("pg_mcp_server.__main__.create_engine") as mock_create, patch(
+            "pg_mcp_server.__main__.test_connection"
+        ) as mock_test, patch("pg_mcp_server.__main__.dispose_engine") as mock_dispose:
+            mock_engine = AsyncMock()
+            mock_create.return_value = mock_engine
+            mock_test.side_effect = Exception("Connection refused")
+            mock_dispose.return_value = None
+
+            # --env-file is now at root level, before subcommand
+            result = runner.invoke(app, ["--env-file", str(env_file), "test"])
+
+            assert result.exit_code == 1
+            assert "Connection failed" in result.output
+            assert "Connection refused" in result.output
+
+    def test_test_command_with_env_file_option(self, tmp_path: Path) -> None:
+        """Test that --env-file option works with test command."""
+        env_file = tmp_path / "custom.env"
+        env_file.write_text(
+            "PG_HOST=custom-host\n"
+            "PG_DATABASE=custom_db\n"
+            "PG_USER=custom_user\n"
+            "PG_PASSWORD=custom_pass\n"
+        )
+
+        with patch("pg_mcp_server.__main__.create_engine") as mock_create, patch(
+            "pg_mcp_server.__main__.test_connection"
+        ), patch("pg_mcp_server.__main__.dispose_engine"):
+            mock_create.return_value = AsyncMock()
+
+            # --env-file is now at root level, before subcommand
+            result = runner.invoke(app, ["--env-file", str(env_file), "test"])
+
+            assert result.exit_code == 0
+            # Verify settings were loaded with custom host
+            call_args = mock_create.call_args[0][0]
+            assert call_args.host == "custom-host"
+
+    def test_test_command_help(self) -> None:
+        """Test that test command help is displayed."""
+        result = runner.invoke(app, ["test", "--help"])
+        assert result.exit_code == 0
+        assert "Test database connection" in result.output
+        # --env-file is now at root level, not on test subcommand
