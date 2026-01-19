@@ -7,7 +7,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from pg_mcp_server.__main__ import app, validate_env_file
+from pg_mcp_server.__main__ import app, resolve_default_env_file, validate_env_file
 from pg_mcp_server.config import get_env_file_path, set_env_file_path
 
 runner = CliRunner()
@@ -36,6 +36,59 @@ class TestCLI:
         result = runner.invoke(app, ["--env-file", str(tmp_path)])
         assert result.exit_code != 0
         assert "Path is not a file" in result.output
+
+    def test_cli_auto_loads_env_from_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test CLI auto-loads .env from cwd when --env-file not specified."""
+        # Create .env file in tmp_path
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "PG_HOST=auto-loaded-host\n"
+            "PG_DATABASE=testdb\n"
+            "PG_USER=testuser\n"
+            "PG_PASSWORD=testpass\n"
+        )
+
+        # Change cwd to tmp_path
+        monkeypatch.chdir(tmp_path)
+
+        with patch("pg_mcp_server.__main__.create_engine") as mock_create, patch(
+            "pg_mcp_server.__main__.test_connection"
+        ), patch("pg_mcp_server.__main__.dispose_engine"):
+            mock_create.return_value = AsyncMock()
+
+            # Run without --env-file flag
+            result = runner.invoke(app, ["test"])
+
+            assert result.exit_code == 0
+            # Verify settings were loaded from auto-detected .env
+            call_args = mock_create.call_args[0][0]
+            assert call_args.host == "auto-loaded-host"
+
+    def test_cli_works_without_env_file_in_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test CLI proceeds without error when no .env in cwd and no --env-file."""
+        # tmp_path has no .env file, but set required env vars
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("PG_HOST", "env-var-host")
+        monkeypatch.setenv("PG_DATABASE", "testdb")
+        monkeypatch.setenv("PG_USER", "testuser")
+        monkeypatch.setenv("PG_PASSWORD", "testpass")
+
+        with patch("pg_mcp_server.__main__.create_engine") as mock_create, patch(
+            "pg_mcp_server.__main__.test_connection"
+        ), patch("pg_mcp_server.__main__.dispose_engine"):
+            mock_create.return_value = AsyncMock()
+
+            # Run without --env-file flag and no .env in cwd
+            result = runner.invoke(app, ["test"])
+
+            assert result.exit_code == 0
+            # Verify settings were loaded from environment variables
+            call_args = mock_create.call_args[0][0]
+            assert call_args.host == "env-var-host"
 
 
 class TestValidateEnvFile:
@@ -88,6 +141,52 @@ class TestValidateEnvFile:
         env_file = tmp_path / "test.env"
         env_file.write_text("PG_HOST=localhost")
         result = validate_env_file(ctx, str(env_file))
+        assert result is None
+
+
+class TestResolveDefaultEnvFile:
+    """Tests for auto-detection of .env file in current working directory."""
+
+    def test_returns_explicit_path_unchanged(self, tmp_path: Path) -> None:
+        """Test that explicitly provided path is returned unchanged."""
+        env_file = tmp_path / "custom.env"
+        env_file.write_text("PG_HOST=localhost")
+        result = resolve_default_env_file(str(env_file))
+        assert result == str(env_file)
+
+    def test_detects_env_file_in_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that .env file in cwd is detected when no explicit path provided."""
+        # Create .env file in tmp_path
+        env_file = tmp_path / ".env"
+        env_file.write_text("PG_HOST=localhost")
+
+        # Change cwd to tmp_path
+        monkeypatch.chdir(tmp_path)
+
+        result = resolve_default_env_file(None)
+        assert result == str(env_file.resolve())
+
+    def test_returns_none_when_no_env_file_in_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that None is returned when no .env file exists in cwd."""
+        # tmp_path has no .env file
+        monkeypatch.chdir(tmp_path)
+
+        result = resolve_default_env_file(None)
+        assert result is None
+
+    def test_returns_none_when_env_is_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that None is returned when .env exists but is a directory."""
+        # Create .env as a directory
+        env_dir = tmp_path / ".env"
+        env_dir.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = resolve_default_env_file(None)
         assert result is None
 
 

@@ -50,6 +50,25 @@ def validate_env_file(ctx: typer.Context, value: str | None) -> str | None:
     return str(env_path.resolve())
 
 
+def resolve_default_env_file(env_file: str | None) -> str | None:
+    """Resolve default .env file if --env-file not specified.
+
+    Args:
+        env_file: Explicitly provided env file path, or None.
+
+    Returns:
+        The provided path if set, otherwise the resolved path to .env
+        in the current working directory if it exists, or None.
+    """
+    if env_file is not None:
+        return env_file
+
+    default_env = Path.cwd() / ".env"
+    if default_env.exists() and default_env.is_file():
+        return str(default_env.resolve())
+    return None
+
+
 def setup_logging(level: str, format_type: str) -> None:
     """Configure logging based on settings.
 
@@ -86,13 +105,16 @@ def main(
     ] = None,
 ) -> None:
     """PostgreSQL MCP Server for database access via Model Context Protocol."""
+    # Resolve default .env file if not explicitly provided
+    resolved_env_file = resolve_default_env_file(env_file)
+
     # If a subcommand is being invoked, just set env_file and return
     if ctx.invoked_subcommand is not None:
-        set_env_file_path(env_file)
+        set_env_file_path(resolved_env_file)
         return
 
     # No subcommand - start the server
-    set_env_file_path(env_file)
+    set_env_file_path(resolved_env_file)
 
     settings = get_settings()
 
