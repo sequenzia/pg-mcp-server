@@ -22,8 +22,14 @@ uv sync
 # Run the server (STDIO transport - default)
 uv run pg-mcp-server
 
+# Run with custom .env file
+uv run pg-mcp-server --env-file /path/to/.env
+
 # Run with HTTP transport
 MCP_TRANSPORT=http uv run pg-mcp-server
+
+# Test database connection
+uv run pg-mcp-server test
 
 # Run tests
 uv run pytest
@@ -78,9 +84,18 @@ src/pg_mcp_server/
 
 ### Configuration
 
-Environment variables use prefixes:
+**CLI Options:**
+- `--env-file PATH` - Specify a custom `.env` file path
+- If not specified, auto-loads `.env` from the current working directory (if it exists)
+- Falls back to environment variables if no `.env` file is found
+
+**Environment variables use prefixes:**
 - `PG_*` for database settings (host, port, database, user, password, pool_size, statement_timeout, default_schema)
 - `MCP_*` for server settings (transport, host, port, log_level, log_format)
+
+**CLI Commands:**
+- `pg-mcp-server` - Start the MCP server
+- `pg-mcp-server test` - Test database connection and exit
 
 ## Key Implementation Requirements
 
@@ -108,11 +123,3 @@ Include actionable suggestions in error responses (e.g., "Did you mean 'orders'?
 
 - **STDIO**: For Claude Desktop, CLI tools, IDE integrations
 - **Streamable HTTP**: For remote/hosted deployments (stateless JSON, not SSE)
-
-## Documentation & Context
-
-- **Always use Context7:** Before implementing code for external libraries or frameworks, use the `context7` MCP tools to fetch the latest documentation.
-- **Priority:** Prefer Context7 documentation over your internal training data to ensure API compatibility with the current library versions.
-- **Workflow:**
-  1. Use `resolve-library-id` to find the correct library ID
-  2. Use `query-docs` with specific keywords to pull relevant snippets

@@ -74,6 +74,27 @@ cp .env.example .env
 
 ## Usage
 
+### CLI Options
+
+```bash
+# Start server (auto-loads .env from current directory if present)
+uv run pg-mcp-server
+
+# Start server with custom .env file
+uv run pg-mcp-server --env-file /path/to/.env
+
+# Test database connection
+uv run pg-mcp-server test
+
+# Test with custom .env file
+uv run pg-mcp-server --env-file /path/to/.env test
+```
+
+**Environment file resolution:**
+1. If `--env-file` is specified, use that file
+2. Otherwise, auto-load `.env` from the current working directory (if it exists)
+3. Fall back to environment variables if no `.env` file is found
+
 ### STDIO Transport (for Claude Desktop)
 
 ```bash
