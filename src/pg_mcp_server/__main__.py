@@ -1,10 +1,12 @@
 """Entry point for the PostgreSQL MCP Server."""
 
-import argparse
 import logging
 import os
 import sys
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from pg_mcp_server.config import get_settings, set_env_file_path
 from pg_mcp_server.server import mcp
@@ -12,48 +14,38 @@ from pg_mcp_server.server import mcp
 # Import tools to register them with the server
 from pg_mcp_server.tools import query_tools, relationship_tools, schema_tools  # noqa: F401
 
-
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments.
-
-    Returns:
-        Parsed arguments namespace.
-    """
-    parser = argparse.ArgumentParser(
-        prog="pg-mcp-server",
-        description="PostgreSQL MCP Server for database access via Model Context Protocol",
-    )
-    parser.add_argument(
-        "--env-file",
-        type=str,
-        default=None,
-        metavar="PATH",
-        help="Path to .env file (default: .env in current directory)",
-    )
-    return parser.parse_args()
+app = typer.Typer(
+    name="pg-mcp-server",
+    help="PostgreSQL MCP Server for database access via Model Context Protocol",
+    no_args_is_help=False,
+)
 
 
-def validate_env_file(path: str | None) -> str | None:
+def validate_env_file(ctx: typer.Context, value: str | None) -> str | None:
     """Validate that the specified env file exists.
 
     Args:
-        path: Path to env file, or None if not specified.
+        ctx: Typer context for handling shell completion.
+        value: Path to env file, or None if not specified.
 
     Returns:
         Resolved absolute path to the env file, or None if not specified.
 
-    Exits:
-        With code 1 if the file doesn't exist or is not a file.
+    Raises:
+        typer.BadParameter: If the file doesn't exist or is not a file.
     """
-    if path is None:
+    # Skip validation during shell completion
+    if ctx.resilient_parsing:
         return None
-    env_path = Path(path)
+
+    if value is None:
+        return None
+
+    env_path = Path(value)
     if not env_path.exists():
-        print(f"Error: Environment file not found: {path}", file=sys.stderr)
-        sys.exit(1)
+        raise typer.BadParameter(f"Environment file not found: {value}")
     if not env_path.is_file():
-        print(f"Error: Path is not a file: {path}", file=sys.stderr)
-        sys.exit(1)
+        raise typer.BadParameter(f"Path is not a file: {value}")
     return str(env_path.resolve())
 
 
@@ -79,10 +71,19 @@ def setup_logging(level: str, format_type: str) -> None:
     )
 
 
-def main() -> None:
-    """Main entry point for the MCP server."""
-    args = parse_args()
-    env_file = validate_env_file(args.env_file)
+@app.command()
+def main(
+    env_file: Annotated[
+        str | None,
+        typer.Option(
+            "--env-file",
+            help="Path to .env file (default: .env in current directory)",
+            callback=validate_env_file,
+            metavar="PATH",
+        ),
+    ] = None,
+) -> None:
+    """Start the PostgreSQL MCP Server."""
     set_env_file_path(env_file)
 
     settings = get_settings()
@@ -103,4 +104,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    app()

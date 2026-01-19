@@ -1,43 +1,56 @@
 """Tests for CLI argument parsing and env file handling."""
 
-import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pytest
+import typer
+from typer.testing import CliRunner
 
-from pg_mcp_server.__main__ import parse_args, validate_env_file
+from pg_mcp_server.__main__ import app, validate_env_file
 from pg_mcp_server.config import get_env_file_path, set_env_file_path
 
+runner = CliRunner()
 
-class TestParseArgs:
-    """Tests for CLI argument parsing."""
 
-    def test_parse_args_no_arguments(self) -> None:
-        """Test parsing with no arguments returns defaults."""
-        with patch.object(sys, "argv", ["pg-mcp-server"]):
-            args = parse_args()
-            assert args.env_file is None
+class TestCLI:
+    """Tests for CLI using typer's CliRunner."""
 
-    def test_parse_args_with_env_file(self) -> None:
-        """Test parsing with --env-file argument."""
-        with patch.object(sys, "argv", ["pg-mcp-server", "--env-file", "/path/to/file.env"]):
-            args = parse_args()
-            assert args.env_file == "/path/to/file.env"
+    def test_cli_help(self) -> None:
+        """Test that --help displays help and includes --env-file option."""
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "--env-file" in result.output
+        assert "PATH" in result.output
+        assert "PostgreSQL MCP Server" in result.output
 
-    def test_parse_args_with_env_file_equals_syntax(self) -> None:
-        """Test parsing with --env-file=value syntax."""
-        with patch.object(sys, "argv", ["pg-mcp-server", "--env-file=/path/to/file.env"]):
-            args = parse_args()
-            assert args.env_file == "/path/to/file.env"
+    def test_cli_with_env_file_missing(self, tmp_path: Path) -> None:
+        """Test CLI with missing env file shows error."""
+        missing_file = tmp_path / "missing.env"
+        result = runner.invoke(app, ["--env-file", str(missing_file)])
+        assert result.exit_code != 0
+        assert "Environment file not found" in result.output
+
+    def test_cli_with_env_file_is_directory(self, tmp_path: Path) -> None:
+        """Test CLI with directory path shows error."""
+        result = runner.invoke(app, ["--env-file", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Path is not a file" in result.output
 
 
 class TestValidateEnvFile:
-    """Tests for env file validation."""
+    """Tests for env file validation callback."""
+
+    def _make_context(self, resilient_parsing: bool = False) -> typer.Context:
+        """Create a mock typer.Context for testing."""
+        ctx = MagicMock(spec=typer.Context)
+        ctx.resilient_parsing = resilient_parsing
+        return ctx
 
     def test_validate_env_file_none(self) -> None:
         """Test validation with None returns None."""
-        result = validate_env_file(None)
+        ctx = self._make_context()
+        result = validate_env_file(ctx, None)
         assert result is None
 
     def test_validate_env_file_valid_file(self, tmp_path: Path) -> None:
@@ -45,24 +58,37 @@ class TestValidateEnvFile:
         env_file = tmp_path / "test.env"
         env_file.write_text("PG_HOST=localhost")
 
-        result = validate_env_file(str(env_file))
+        ctx = self._make_context()
+        result = validate_env_file(ctx, str(env_file))
         assert result == str(env_file.resolve())
 
     def test_validate_env_file_missing_file(self, tmp_path: Path) -> None:
-        """Test validation with missing file exits with error."""
+        """Test validation with missing file raises BadParameter."""
         missing_file = tmp_path / "missing.env"
 
-        with pytest.raises(SystemExit) as exc_info:
-            validate_env_file(str(missing_file))
+        ctx = self._make_context()
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_env_file(ctx, str(missing_file))
 
-        assert exc_info.value.code == 1
+        assert "Environment file not found" in str(exc_info.value)
 
     def test_validate_env_file_directory(self, tmp_path: Path) -> None:
-        """Test validation with directory path exits with error."""
-        with pytest.raises(SystemExit) as exc_info:
-            validate_env_file(str(tmp_path))
+        """Test validation with directory path raises BadParameter."""
+        ctx = self._make_context()
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_env_file(ctx, str(tmp_path))
 
-        assert exc_info.value.code == 1
+        assert "Path is not a file" in str(exc_info.value)
+
+    def test_validate_env_file_resilient_parsing(self, tmp_path: Path) -> None:
+        """Test validation during shell completion returns None."""
+        # During shell completion, resilient_parsing is True
+        ctx = self._make_context(resilient_parsing=True)
+        # Even with a valid path, should return None during completion
+        env_file = tmp_path / "test.env"
+        env_file.write_text("PG_HOST=localhost")
+        result = validate_env_file(ctx, str(env_file))
+        assert result is None
 
 
 class TestEnvFilePathState:
