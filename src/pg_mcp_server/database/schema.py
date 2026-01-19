@@ -67,6 +67,48 @@ WHERE v.schemaname = :schema_name
 ORDER BY v.viewname;
 """
 
+# Query: List tables in schema (without name pattern filter)
+# Used when name_pattern is None to avoid asyncpg AmbiguousParameterError
+LIST_TABLES_SQL_NO_FILTER = """
+SELECT
+    t.tablename AS name,
+    t.schemaname AS schema_name,
+    'table' AS type,
+    pg_catalog.obj_description(c.oid, 'pg_class') AS description,
+    GREATEST(c.reltuples::bigint, 0) AS estimated_row_count,
+    pg_total_relation_size(c.oid) AS size_bytes,
+    pg_size_pretty(pg_total_relation_size(c.oid)) AS size_pretty,
+    EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid = c.oid AND i.indisprimary) AS has_primary_key,
+    (SELECT count(*) FROM information_schema.columns col
+     WHERE col.table_schema = t.schemaname AND col.table_name = t.tablename) AS column_count
+FROM pg_tables t
+JOIN pg_class c ON c.relname = t.tablename
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.schemaname
+WHERE t.schemaname = :schema_name
+ORDER BY t.tablename;
+"""
+
+# Query: List views in schema (without name pattern filter)
+# Used when name_pattern is None to avoid asyncpg AmbiguousParameterError
+LIST_VIEWS_SQL_NO_FILTER = """
+SELECT
+    v.viewname AS name,
+    v.schemaname AS schema_name,
+    'view' AS type,
+    pg_catalog.obj_description(c.oid, 'pg_class') AS description,
+    0::bigint AS estimated_row_count,
+    NULL::bigint AS size_bytes,
+    NULL AS size_pretty,
+    FALSE AS has_primary_key,
+    (SELECT count(*) FROM information_schema.columns col
+     WHERE col.table_schema = v.schemaname AND col.table_name = v.viewname) AS column_count
+FROM pg_views v
+JOIN pg_class c ON c.relname = v.viewname
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = v.schemaname
+WHERE v.schemaname = :schema_name
+ORDER BY v.viewname;
+"""
+
 # Query: Describe table columns
 DESCRIBE_COLUMNS_SQL = """
 SELECT
@@ -223,13 +265,22 @@ class SchemaService:
         Returns:
             List of table information dictionaries.
         """
-        params = {"schema_name": schema_name, "name_pattern": name_pattern}
+        # Use different queries based on whether name_pattern is provided
+        # to avoid asyncpg AmbiguousParameterError when name_pattern is None
+        if name_pattern is not None:
+            params = {"schema_name": schema_name, "name_pattern": name_pattern}
+            tables_sql = LIST_TABLES_SQL
+            views_sql = LIST_VIEWS_SQL
+        else:
+            params = {"schema_name": schema_name}
+            tables_sql = LIST_TABLES_SQL_NO_FILTER
+            views_sql = LIST_VIEWS_SQL_NO_FILTER
 
-        result = await self._execute_with_timeout(LIST_TABLES_SQL, params)
+        result = await self._execute_with_timeout(tables_sql, params)
         tables = [dict(row._mapping) for row in result.fetchall()]
 
         if include_views:
-            result = await self._execute_with_timeout(LIST_VIEWS_SQL, params)
+            result = await self._execute_with_timeout(views_sql, params)
             tables.extend([dict(row._mapping) for row in result.fetchall()])
 
         return sorted(tables, key=lambda x: x["name"])
