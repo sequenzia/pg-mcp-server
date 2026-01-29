@@ -4,6 +4,8 @@ These tools allow LLMs to execute read-only SQL queries and analyze
 query execution plans.
 """
 
+import logging
+import time
 from typing import Any
 
 from mcp.server.fastmcp import Context
@@ -18,6 +20,13 @@ from pg_mcp_server.models.results import (
     QueryColumn,
 )
 from pg_mcp_server.server import AppContext, mcp
+
+logger = logging.getLogger(__name__)
+
+
+def _truncate_for_log(text: str, max_length: int = 100) -> str:
+    """Truncate text for logging to avoid huge log entries."""
+    return text[:max_length] + "..." if len(text) > max_length else text
 
 
 @mcp.tool(
@@ -59,7 +68,17 @@ async def execute_query(
         Only SELECT and WITH...SELECT queries are allowed.
         INSERT, UPDATE, DELETE, DROP, etc. are blocked.
     """
+    start_time = time.perf_counter()
+    param_count = len(params) if params else 0
+    logger.debug(
+        "execute_query called with sql=%r, param_count=%d, limit=%d",
+        _truncate_for_log(sql),
+        param_count,
+        limit,
+    )
+
     if ctx is None:
+        logger.error("execute_query: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -81,6 +100,13 @@ async def execute_query(
                 timeout_ms=timeout_ms,
             )
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "execute_query completed in %.2fms, rows=%d, has_more=%s",
+            elapsed_ms,
+            result["row_count"],
+            result["has_more"],
+        )
         return ExecuteQueryOutput(
             columns=[QueryColumn(**c) for c in result["columns"]],
             rows=result["rows"],
@@ -90,6 +116,10 @@ async def execute_query(
             query_hash=result["query_hash"],
         )
     except QueryValidationError as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error(
+            "execute_query validation failed after %.2fms: %s", elapsed_ms, e.message
+        )
         return create_tool_error(
             e.code,
             e.message,
@@ -98,6 +128,9 @@ async def execute_query(
             suggestion=e.suggestion,
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("execute_query failed after %.2fms: %s", elapsed_ms, str(e))
+
         error_str = str(e).lower()
         if "timeout" in error_str:
             code = ErrorCode.QUERY_TIMEOUT
@@ -152,7 +185,16 @@ async def explain_query(
     Example:
         explain_query(sql="SELECT * FROM orders WHERE status = 'pending'")
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "explain_query called with sql=%r, analyze=%s, format=%s",
+        _truncate_for_log(sql),
+        analyze,
+        format,
+    )
+
     if ctx is None:
+        logger.error("explain_query: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -177,8 +219,19 @@ async def explain_query(
                 buffers=buffers,
             )
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "explain_query completed in %.2fms, format=%s, analyze=%s",
+            elapsed_ms,
+            format,
+            analyze,
+        )
         return ExplainQueryOutput(**result)
     except QueryValidationError as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error(
+            "explain_query validation failed after %.2fms: %s", elapsed_ms, e.message
+        )
         return create_tool_error(
             e.code,
             e.message,
@@ -187,6 +240,9 @@ async def explain_query(
             suggestion=e.suggestion,
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("explain_query failed after %.2fms: %s", elapsed_ms, str(e))
+
         error_str = str(e).lower()
         if "timeout" in error_str:
             code = ErrorCode.QUERY_TIMEOUT

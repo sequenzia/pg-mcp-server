@@ -3,6 +3,8 @@
 These tools help LLMs discover and understand database schema structure.
 """
 
+import logging
+import time
 from typing import Any
 
 from mcp.server.fastmcp import Context
@@ -23,6 +25,8 @@ from pg_mcp_server.models.schema import (
     TableInfo,
 )
 from pg_mcp_server.server import AppContext, mcp
+
+logger = logging.getLogger(__name__)
 
 
 @mcp.tool(
@@ -52,7 +56,11 @@ async def list_schemas(
     Example:
         list_schemas() -> {"schemas": [{"name": "public", "table_count": 15}], "total_count": 1}
     """
+    start_time = time.perf_counter()
+    logger.debug("list_schemas called with include_system=%s", include_system)
+
     if ctx is None:
+        logger.error("list_schemas: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -66,11 +74,19 @@ async def list_schemas(
             service = SchemaService(conn, app_ctx.settings.database.statement_timeout)
             schemas = await service.list_schemas(include_system=include_system)
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "list_schemas completed in %.2fms, returned %d schemas",
+            elapsed_ms,
+            len(schemas),
+        )
         return ListSchemasOutput(
             schemas=[SchemaInfo(**s) for s in schemas],
             total_count=len(schemas),
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("list_schemas failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             str(e),
@@ -110,7 +126,16 @@ async def list_tables(
     Example:
         list_tables(schema_name="public") -> {"tables": [...], "total_count": 15}
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "list_tables called with schema_name=%s, include_views=%s, name_pattern=%s",
+        schema_name,
+        include_views,
+        name_pattern,
+    )
+
     if ctx is None:
+        logger.error("list_tables: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -128,12 +153,20 @@ async def list_tables(
                 name_pattern=name_pattern,
             )
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "list_tables completed in %.2fms, returned %d tables",
+            elapsed_ms,
+            len(tables),
+        )
         return ListTablesOutput(
             tables=[TableInfo(**t) for t in tables],
             schema_name=schema_name,
             total_count=len(tables),
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("list_tables failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.SCHEMA_NOT_FOUND
             if "schema" in str(e).lower()
@@ -177,7 +210,18 @@ async def describe_table(
     Example:
         describe_table(table_name="users") -> {"columns": [...], "indexes": [...]}
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "describe_table called with table_name=%s, schema_name=%s, "
+        "include_indexes=%s, include_constraints=%s",
+        table_name,
+        schema_name,
+        include_indexes,
+        include_constraints,
+    )
+
     if ctx is None:
+        logger.error("describe_table: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -193,6 +237,13 @@ async def describe_table(
             # Check if table exists
             exists = await service.table_exists(schema_name, table_name)
             if not exists:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                logger.debug(
+                    "describe_table: table %s.%s not found after %.2fms",
+                    schema_name,
+                    table_name,
+                    elapsed_ms,
+                )
                 return create_tool_error(
                     ErrorCode.TABLE_NOT_FOUND,
                     f"Table '{table_name}' does not exist in schema '{schema_name}'",
@@ -238,6 +289,14 @@ async def describe_table(
                 )
             )
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "describe_table completed in %.2fms, table=%s.%s, columns=%d",
+            elapsed_ms,
+            schema_name,
+            table_name,
+            len(column_infos),
+        )
         return DescribeTableOutput(
             table_name=table_name,
             schema_name=schema_name,
@@ -250,6 +309,8 @@ async def describe_table(
             size_pretty=metadata.get("size_pretty") if metadata else None,
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("describe_table failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.TABLE_NOT_FOUND
             if "not exist" in str(e).lower()
@@ -296,7 +357,20 @@ async def get_sample_rows(
     Example:
         get_sample_rows(table_name="orders", limit=3) -> {"rows": [...]}
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "get_sample_rows called with table_name=%s, schema_name=%s, "
+        "limit=%d, columns_count=%d, has_where=%s, randomize=%s",
+        table_name,
+        schema_name,
+        limit,
+        len(columns) if columns else 0,
+        where_clause is not None,
+        randomize,
+    )
+
     if ctx is None:
+        logger.error("get_sample_rows: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -315,6 +389,13 @@ async def get_sample_rows(
             # Check if table exists
             exists = await service.table_exists(schema_name, table_name)
             if not exists:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                logger.debug(
+                    "get_sample_rows: table %s.%s not found after %.2fms",
+                    schema_name,
+                    table_name,
+                    elapsed_ms,
+                )
                 return create_tool_error(
                     ErrorCode.TABLE_NOT_FOUND,
                     f"Table '{table_name}' does not exist in schema '{schema_name}'",
@@ -343,6 +424,12 @@ async def get_sample_rows(
         else:
             note = "Showing first rows ordered by primary key"
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "get_sample_rows completed in %.2fms, returned %d rows",
+            elapsed_ms,
+            result["row_count"],
+        )
         return GetSampleRowsOutput(
             table_name=table_name,
             schema_name=schema_name,
@@ -353,6 +440,8 @@ async def get_sample_rows(
             note=note,
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("get_sample_rows failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.TABLE_NOT_FOUND
             if "not exist" in str(e).lower()

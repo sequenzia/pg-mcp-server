@@ -4,6 +4,8 @@ These tools help LLMs discover foreign key relationships and join paths
 between tables.
 """
 
+import logging
+import time
 from typing import Any
 
 from mcp.server.fastmcp import Context
@@ -20,6 +22,8 @@ from pg_mcp_server.models.relationships import (
     JoinStep,
 )
 from pg_mcp_server.server import AppContext, mcp
+
+logger = logging.getLogger(__name__)
 
 
 @mcp.tool(
@@ -50,7 +54,15 @@ async def get_foreign_keys(
     Example:
         get_foreign_keys(table_name="orders") -> {"outgoing": [...], "incoming": [...]}
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "get_foreign_keys called with table_name=%s, schema_name=%s",
+        table_name,
+        schema_name,
+    )
+
     if ctx is None:
+        logger.error("get_foreign_keys: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -65,6 +77,13 @@ async def get_foreign_keys(
             outgoing = await service.get_outgoing_fks(schema_name, table_name)
             incoming = await service.get_incoming_fks(schema_name, table_name)
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "get_foreign_keys completed in %.2fms, outgoing=%d, incoming=%d",
+            elapsed_ms,
+            len(outgoing),
+            len(incoming),
+        )
         return GetForeignKeysOutput(
             table_name=table_name,
             schema_name=schema_name,
@@ -74,6 +93,8 @@ async def get_foreign_keys(
             incoming_count=len(incoming),
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("get_foreign_keys failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.TABLE_NOT_FOUND
             if "not exist" in str(e).lower()
@@ -118,7 +139,19 @@ async def find_join_path(
     Example:
         find_join_path(from_table="order_items", to_table="users") -> {"paths": [...]}
     """
+    start_time = time.perf_counter()
+    logger.debug(
+        "find_join_path called with from_table=%s, to_table=%s, "
+        "from_schema=%s, to_schema=%s, max_depth=%d",
+        from_table,
+        to_table,
+        from_schema,
+        to_schema,
+        max_depth,
+    )
+
     if ctx is None:
+        logger.error("find_join_path: No context available")
         return create_tool_error(
             ErrorCode.CONNECTION_ERROR,
             "No context available",
@@ -186,6 +219,12 @@ async def find_join_path(
         elif len(join_paths) == 0:
             note = "No path found between tables via foreign keys"
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.debug(
+            "find_join_path completed in %.2fms, paths_found=%d",
+            elapsed_ms,
+            len(join_paths),
+        )
         return FindJoinPathOutput(
             from_table=from_table,
             to_table=to_table,
@@ -194,6 +233,8 @@ async def find_join_path(
             note=note,
         )
     except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("find_join_path failed after %.2fms: %s", elapsed_ms, str(e))
         return create_tool_error(
             ErrorCode.PATH_NOT_FOUND if "path" in str(e).lower() else ErrorCode.CONNECTION_ERROR,
             str(e),
